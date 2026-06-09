@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // ── API Config ────────────────────────────────────────────
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://visify-backend-production.up.railway.app/api';
 const BRAND_API_KEY = window.VISIFY_API_KEY;
 const PRODUCT_ID = window.VISIFY_PRODUCT_ID;
 
