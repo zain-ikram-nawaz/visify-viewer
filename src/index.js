@@ -220,6 +220,12 @@ async function init() {
     return;
   }
 
+  if (!BRAND_API_KEY || !PRODUCT_HANDLE) {
+    container.innerHTML = `<div id="visify-root"><p class="v-error">⚠️ Visify: VISIFY_API_KEY and VISIFY_PRODUCT_HANDLE must be set.</p></div>`;
+    console.error('Visify: Missing VISIFY_API_KEY or VISIFY_PRODUCT_HANDLE on window.');
+    return;
+  }
+
   // Pehle loading dikhao
   container.innerHTML = `
     <div id="visify-root">
