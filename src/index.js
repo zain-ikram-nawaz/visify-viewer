@@ -11,117 +11,204 @@ const PRODUCT_ID = window.VISIFY_PRODUCT_ID;
 // ── Inject CSS ────────────────────────────────────────────
 const style = document.createElement('style');
 style.textContent = `
-  #visify-root * { margin:0; padding:0; box-sizing:border-box; font-family:sans-serif; }
+  #visify-root * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+
   #visify-root {
-    width: 100%; height: 500px;
+    width: 100%;
+    height: 480px;
     display: flex;
-    background: #111;
-    border-radius: 12px;
+    background: #0f0f0f;
     overflow: hidden;
     position: relative;
   }
-  #visify-canvas { flex: 1; display: block; }
+
+  #visify-canvas { flex: 1; display: block; min-width: 0; }
+
+  /* ── Panel ── */
   #visify-panel {
-    width: 200px;
-    background: #1a1a1a;
-    padding: 20px 14px;
+    width: 180px;
+    flex-shrink: 0;
+    background: #0f0f0f;
+    border-left: 1px solid rgba(255,255,255,0.05);
+    padding: 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 0;
   }
-  #visify-panel .v-logo {
-    color: #fff;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid #2a2a2a;
-  }
-  #visify-panel .v-logo span { color: #4F46E5; }
-  #visify-panel .v-label {
-    color: #888;
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-    display: block;
-  }
+
+  /* ── Product info ── */
   .v-product-name {
-    color: #fff;
-    font-size: 14px;
+    color: #ffffff;
+    font-size: 13px;
     font-weight: 600;
     line-height: 1.4;
+    margin-bottom: 2px;
   }
+
   .v-brand-name {
-    color: #666;
-    font-size: 11px;
-    margin-top: 2px;
+    color: #444;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
   }
+
+  /* ── Labels ── */
+  #visify-panel .v-label {
+    color: #3a3a3a;
+    font-size: 8px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .v-section { margin-bottom: 16px; }
+
+  .v-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.04);
+    margin-bottom: 16px;
+  }
+
+  /* ── Color swatches ── */
   .v-colors { display: flex; gap: 7px; flex-wrap: wrap; }
+
   .v-color-btn {
-    width: 32px; height: 32px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    border: 3px solid transparent;
+    border: 1.5px solid transparent;
+    outline: 1.5px solid transparent;
+    outline-offset: 2px;
     cursor: pointer;
-    transition: transform 0.15s;
+    transition: transform 0.15s ease, outline-color 0.15s ease;
     position: relative;
+    flex-shrink: 0;
   }
-  .v-color-btn:hover { transform: scale(1.1); }
-  .v-color-btn.v-active { border-color: #fff; transform: scale(1.15); }
-  .v-color-btn[title]:hover::after {
+  .v-color-btn:hover { transform: scale(1.12); }
+  .v-color-btn.v-active {
+    outline-color: rgba(255,255,255,0.6);
+    transform: scale(1.12);
+  }
+
+  /* Tooltip */
+  .v-color-btn::after {
     content: attr(title);
     position: absolute;
-    bottom: -22px;
+    bottom: calc(100% + 6px);
     left: 50%;
-    transform: translateX(-50%);
-    background: #333;
-    color: #fff;
-    font-size: 10px;
-    padding: 2px 6px;
+    transform: translateX(-50%) translateY(3px);
+    background: rgba(15,15,15,0.95);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #ccc;
+    font-size: 9px;
+    padding: 3px 7px;
     border-radius: 4px;
     white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    letter-spacing: 0.3px;
   }
+  .v-color-btn:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── Loading overlay ── */
   #visify-loading {
     position: absolute;
     inset: 0;
-    background: #111;
+    background: #0f0f0f;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 14px;
+    gap: 12px;
     z-index: 10;
   }
-  #visify-loading h3 { color: #fff; font-size: 16px; letter-spacing: 2px; }
-  #visify-loading p { color: #666; font-size: 12px; }
+
+  .v-loading-logo {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+  }
+  .v-loading-logo span { color: #4F46E5; }
+
+  #visify-loading p {
+    color: #333;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
   .v-spinner {
-    width: 40px; height: 40px;
-    border: 3px solid #333;
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid rgba(255,255,255,0.05);
     border-top-color: #4F46E5;
     border-radius: 50%;
-    animation: v-spin 0.8s linear infinite;
+    animation: v-spin 0.7s linear infinite;
   }
   @keyframes v-spin { to { transform: rotate(360deg); } }
+
   .v-progress {
-    width: 160px; height: 3px;
-    background: #333; border-radius: 2px; overflow: hidden;
+    width: 120px;
+    height: 1.5px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 99px;
+    overflow: hidden;
   }
   .v-progress-fill {
-    height: 100%; background: #4F46E5;
-    width: 0%; transition: width 0.3s;
+    height: 100%;
+    background: #4F46E5;
+    width: 0%;
+    transition: width 0.3s ease;
   }
+
+  /* ── Powered by ── */
   #visify-panel .v-powered {
     margin-top: auto;
-    color: #444;
-    font-size: 10px;
+    color: #222;
+    font-size: 8px;
     text-align: center;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
   }
-  #visify-panel .v-powered a { color: #4F46E5; text-decoration: none; }
-  .v-error {
-    color: #e63946;
-    font-size: 12px;
-    text-align: center;
-    padding: 20px;
+  #visify-panel .v-powered a {
+    color: #333;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  #visify-panel .v-powered a:hover { color: #4F46E5; }
+
+  .v-error { color: #e63946; font-size: 12px; text-align: center; padding: 20px; }
+
+  /* ── Responsive — mobile ── */
+  @media (max-width: 600px) {
+    #visify-root { flex-direction: column; height: auto; }
+    #visify-canvas { height: 280px; width: 100%; }
+    #visify-panel {
+      width: 100%;
+      border-left: none;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      flex-direction: row;
+      align-items: center;
+      padding: 10px 14px;
+      gap: 14px;
+      overflow-x: auto;
+    }
+    .v-product-name { font-size: 11px; white-space: nowrap; margin-bottom: 0; }
+    .v-brand-name { display: none; }
+    .v-divider { display: none; }
+    .v-section { margin-bottom: 0; flex-shrink: 0; }
+    .v-label { display: none; }
+    .v-colors { flex-wrap: nowrap; }
+    #visify-panel .v-powered { margin-top: 0; white-space: nowrap; flex-shrink: 0; }
   }
 `;
 document.head.appendChild(style);
@@ -139,7 +226,7 @@ async function init() {
     <div id="visify-root">
       <div id="visify-loading">
         <div class="v-spinner"></div>
-        <h3>VISIFY</h3>
+        <div class="v-loading-logo">VI<span>SI</span>FY</div>
         <div class="v-progress"><div class="v-progress-fill" id="v-fill"></div></div>
         <p id="v-loading-text">Connecting...</p>
       </div>
@@ -172,22 +259,24 @@ async function init() {
   document.getElementById('visify-root').innerHTML = `
     <div id="visify-loading">
       <div class="v-spinner"></div>
-      <h3>VISIFY</h3>
+      <div class="v-loading-logo">VI<span>SI</span>FY</div>
       <div class="v-progress"><div class="v-progress-fill" id="v-fill"></div></div>
       <p id="v-loading-text">Loading 3D Model...</p>
     </div>
     <canvas id="visify-canvas"></canvas>
     <div id="visify-panel">
       <div class="v-logo">VI<span>SI</span>FY</div>
-      <div>
+      <div class="v-section">
+        <span class="v-label">Product</span>
         <div class="v-product-name">${productData.name}</div>
         <div class="v-brand-name">${brandData.name}</div>
       </div>
-      <div>
-        <span class="v-label">Select Color</span>
+      <div class="v-divider"></div>
+      <div class="v-section">
+        <span class="v-label">Color</span>
         <div class="v-colors" id="v-colors"></div>
       </div>
-      <div class="v-powered">Powered by <a href="#">Visify</a></div>
+      <div class="v-powered">Powered by <a href="https://visify.io" target="_blank">Visify</a></div>
     </div>
   `;
 
@@ -231,7 +320,7 @@ async function init() {
 
   function resizeViewer() {
     const root = document.getElementById('visify-root');
-    const w = root.clientWidth - 200;
+    const w = root.clientWidth - 220;
     const h = root.clientHeight;
     renderer.setSize(w, h);
     renderer.setPixelRatio(window.devicePixelRatio);
