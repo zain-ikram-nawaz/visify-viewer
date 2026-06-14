@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   root: '.',
-  publicDir: '',
+  publicDir: 'public',
   server: {
     port: 5173,
   },
@@ -13,9 +13,10 @@ export default defineConfig({
       fileName: 'embed',
       formats: ['iife'],
     },
-   outDir: 'dist',
+    outDir: 'dist',
+    copyPublicDir: true,
     rollupOptions: {
-      input: 'index.html',
+      external: [],
     },
   },
 });
