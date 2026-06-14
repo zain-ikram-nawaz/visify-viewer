@@ -6,8 +6,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // ── API Config ────────────────────────────────────────────
 const API_BASE = 'https://visify-backend-production.up.railway.app/api';
 const BRAND_API_KEY = window.VISIFY_API_KEY;
-const PRODUCT_ID = window.VISIFY_PRODUCT_ID;
-
+const PRODUCT_HANDLE = window.VISIFY_PRODUCT_HANDLE;
 // ── Inject CSS ────────────────────────────────────────────
 const style = document.createElement('style');
 style.textContent = `
@@ -236,7 +235,7 @@ async function init() {
   // ── API se data fetch karo ────────────────────────────
   let productData, brandData;
   try {
-    const res = await fetch(`${API_BASE}/embed/${BRAND_API_KEY}/${PRODUCT_ID}`);
+const res = await fetch(`${API_BASE}/embed/handle/${BRAND_API_KEY}/${PRODUCT_HANDLE}`);
     const data = await res.json();
 
     if (!res.ok) {
@@ -396,7 +395,7 @@ document.getElementById('v-colors').addEventListener('click', (e) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       brandId: brandData.id,
-      productId: PRODUCT_ID,
+      productId: productData.id,
       event: 'color_change',
       variantSelected: btn.title,
     }),
