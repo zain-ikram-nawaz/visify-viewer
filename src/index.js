@@ -5,12 +5,10 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // ── Config ────────────────────────────────────────────────
 const API_BASE = 'https://visify-backend-production.up.railway.app/api';
-
-const _script = document.currentScript || document.querySelector('script[src*="embed.iife.js"]');
-
-// Pehle window object check karein (kyunki aapne liquid mein script upar likhi hai), fir fallback attribute par jayein
-const BRAND_API_KEY = window.VISIFY_API_KEY || _script?.getAttribute('data-api-key');
-const PRODUCT_HANDLE = window.VISIFY_PRODUCT_ID || _script?.getAttribute('data-product-handle');
+// Support both window globals (Shopify Liquid) and script data attributes
+const _script = document.currentScript;
+const BRAND_API_KEY = window.VISIFY_API_KEY;
+const PRODUCT_HANDLE = window.VISIFY_PRODUCT_ID;
 
 let scene, camera, renderer, controls;
 let loadedParts = {};        // partId → THREE.Group
