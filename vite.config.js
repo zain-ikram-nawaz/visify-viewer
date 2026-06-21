@@ -7,16 +7,8 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    lib: {
-      entry: 'src/index.js',
-      name: 'Visify',
-      fileName: 'embed',
-      formats: ['iife'],
-    },
+    // lib block ko hata diya taake yeh poori web app build kare
     outDir: 'dist',
     copyPublicDir: true,
-    rollupOptions: {
-      external: [],
-    },
   },
 });
