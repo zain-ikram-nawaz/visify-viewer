@@ -7,8 +7,19 @@ export default defineConfig({
     port: 5173,
   },
   build: {
-    // lib block ko hata diya taake yeh poori web app build kare
     outDir: 'dist',
     copyPublicDir: true,
+    rollupOptions: {
+      input: {
+        // Main entry point aapka HTML hi rahega taake Vercel website khole
+        main: './index.html',
+      },
+      output: {
+        // Yeh line ensure karegi ki aapki JS file ka naam 'embed.iife.js' hi bane
+        entryFileNames: 'embed.iife.js',
+        assetFileNames: '[name].[ext]',
+        chunkFileNames: '[name].js',
+      },
+    },
   },
 });
