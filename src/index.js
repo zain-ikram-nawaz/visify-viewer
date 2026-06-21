@@ -5,16 +5,18 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // ── Config ────────────────────────────────────────────────
 const API_BASE = 'https://visify-backend-production.up.railway.app/api';
+// Support both window globals (Shopify Liquid) and script data attributes
+const _script = document.currentScript;
 const BRAND_API_KEY = window.VISIFY_API_KEY;
-const PRODUCT_HANDLE = window.VISIFY_PRODUCT_HANDLE;
+const PRODUCT_HANDLE = window.VISIFY_PRODUCT_ID;
 
-// ── State ─────────────────────────────────────────────────
 let scene, camera, renderer, controls;
 let loadedParts = {};        // partId → THREE.Group
 let selectedVariants = {};   // partId → variantId
 let sessionId = null;
 let configuratorData = null;
 let totalPrice = 0;
+let baseModelCenter = new THREE.Vector3();
 
 // ── Loader ────────────────────────────────────────────────
 const loader = new GLTFLoader();
@@ -283,8 +285,9 @@ document.head.appendChild(style);
 
 // ── Init ──────────────────────────────────────────────────
 async function init() {
+  console.log('[Visify] init() start', { API_BASE, BRAND_API_KEY, PRODUCT_HANDLE });
   const container = document.getElementById('visify-configurator');
-  if (!container) return;
+  if (!container) { console.error('[Visify] #visify-configurator element not found in DOM'); return; }
 
   container.innerHTML = `
     <div id="visify-root">
@@ -310,6 +313,12 @@ async function init() {
 
     configuratorData = data.configurator;
     totalPrice = configuratorData.basePrice || 0;
+    console.log('[Visify] configuratorData loaded', {
+      name: configuratorData.name,
+      baseModelUrl: configuratorData.baseModelUrl,
+      partsCount: configuratorData.parts?.length,
+      parts: configuratorData.parts?.map(p => ({ id: p._id, name: p.name, modelUrl: p.modelUrl, isDefault: p.isDefault, isRequired: p.isRequired })),
+    });
 
     // Create session
     const sessionRes = await fetch(`${API_BASE}/configurator/session`, {
@@ -359,14 +368,16 @@ async function init() {
   setupThreeJS();
 
   // ── Load base model ───────────────────────────────────
+  console.log('[Visify] loading base model:', configuratorData.baseModelUrl);
   await loadModel(configuratorData.baseModelUrl, 'base', true);
+  console.log('[Visify] base model loaded, loadedParts:', Object.keys(loadedParts));
 
   // ── Build parts panel ─────────────────────────────────
   buildPartsPanel();
 
-  // ── Load default parts ────────────────────────────────
+  // ── Load default + required parts ────────────────────
   for (const part of configuratorData.parts) {
-    if (part.isDefault) {
+    if (part.isDefault || part.isRequired) {
       await addPartToScene(part);
     }
   }
@@ -432,6 +443,11 @@ function animate() {
 
 // ── Load 3D Model ─────────────────────────────────────────
 function loadModel(url, id, isBase = false) {
+  if (!url) {
+    console.warn(`[Visify] loadModel: no URL for id="${id}"`);
+    return Promise.resolve(null);
+  }
+  console.log(`[Visify] loadModel start — id="${id}" isBase=${isBase} url=${url}`);
   return new Promise((resolve) => {
     const fillEl = document.getElementById('v-fill');
     const loadingText = document.getElementById('v-loading-text');
@@ -440,21 +456,28 @@ function loadModel(url, id, isBase = false) {
       url,
       (gltf) => {
         const group = gltf.scene;
-
-        // Auto center
         const box = new THREE.Box3().setFromObject(group);
-        const center = box.getCenter(new THREE.Vector3());
-        group.position.sub(center);
+        const size = box.getSize(new THREE.Vector3());
+        console.log(`[Visify] loadModel success — id="${id}"`, { position: group.position, size });
 
         if (isBase) {
-          const size = box.getSize(new THREE.Vector3()).length();
-          camera.position.set(0, size * 0.3, size * 1.5);
+          const center = box.getCenter(new THREE.Vector3());
+          group.position.sub(center);
+          baseModelCenter.copy(center);
+          console.log('[Visify] base model center stored:', baseModelCenter);
+
+          const len = size.length();
+          camera.position.set(0, len * 0.3, len * 1.5);
           controls.reset();
+        } else {
+          group.position.sub(baseModelCenter);
+          console.log(`[Visify] part "${id}" position after offset:`, group.position);
         }
 
         group.userData.visifyId = id;
         scene.add(group);
         loadedParts[id] = group;
+        console.log('[Visify] scene children count:', scene.children.length);
         resolve(group);
       },
       (xhr) => {
@@ -465,7 +488,7 @@ function loadModel(url, id, isBase = false) {
         }
       },
       (err) => {
-        console.error('Model error:', err);
+        console.error(`[Visify] loadModel FAILED — id="${id}" url=${url}`, err);
         resolve(null);
       }
     );
@@ -474,8 +497,13 @@ function loadModel(url, id, isBase = false) {
 
 // ── Add Part to Scene ─────────────────────────────────────
 async function addPartToScene(part) {
-  if (loadedParts[part._id]) return;
-  await loadModel(part.modelUrl, part._id);
+  console.log('[Visify] addPartToScene', { id: part._id, name: part.name, modelUrl: part.modelUrl });
+  if (loadedParts[part._id]) {
+    console.log('[Visify] part already in scene, skipping:', part._id);
+    return;
+  }
+  const result = await loadModel(part.modelUrl, part._id);
+  console.log('[Visify] addPartToScene done, result:', result ? 'loaded' : 'FAILED');
   updatePrice();
 }
 
@@ -596,9 +624,11 @@ function buildPartsPanel() {
       e.stopPropagation();
       const partId = btn.dataset.partId;
       const part = configuratorData.parts.find(p => p._id === partId);
+      console.log('[Visify] toggle click — partId:', partId, 'found:', !!part);
       if (!part) return;
 
       const isAdded = !!loadedParts[partId];
+      console.log('[Visify] isAdded:', isAdded);
 
       if (isAdded) {
         removePartFromScene(partId);
@@ -622,6 +652,22 @@ function buildPartsPanel() {
           selectedVariants[partId] = part.variants[0]._id;
           updatePrice();
         }
+      }
+    });
+  });
+
+  // Part header click — toggle the part (proxies to the toggle btn)
+  list.querySelectorAll('.v-part-header').forEach(header => {
+    header.addEventListener('click', async () => {
+      const partId = header.dataset.partId;
+      const toggleBtn = document.getElementById(`toggle-${partId}`);
+      console.log('[Visify] header click — partId:', partId, 'toggleBtn found:', !!toggleBtn);
+      if (toggleBtn) {
+        toggleBtn.click();
+      } else {
+        // isRequired part — no toggle button, but still expand/collapse variants
+        const variantsEl = document.getElementById(`variants-${partId}`);
+        if (variantsEl) variantsEl.classList.toggle('open');
       }
     });
   });
