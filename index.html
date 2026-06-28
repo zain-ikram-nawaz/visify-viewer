@@ -3,43 +3,75 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Visify — 3D Configurator Demo</title>
+    <title>Visify — 3D Configurator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
 
       body {
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #0a0a0a;
+        font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        background: #f9f9fb; /* Light Shopify friendly neutral background */
+        color: #121212;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
       }
 
       /* ── Header ── */
       header {
-        padding: 0 32px;
-        height: 56px;
+        padding: 0 24px;
+        height: 60px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid #e8e8ed;
+        background: #ffffff;
         flex-shrink: 0;
+        position: relative;
+        z-index: 10;
       }
 
       .logo {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 800;
-        letter-spacing: 3px;
-        color: #fff;
+        letter-spacing: 0.12em;
+        color: #121212;
         text-transform: uppercase;
       }
-      .logo span { color: #4F46E5; }
+      .logo span { color: #5a31f4; } /* Premium Royal Accent */
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* Pulsing live dot */
+      .live-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #10b981; /* Green live indicator for clean look */
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+        animation: live-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes live-pulse {
+        0%  { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+        60% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+        100%{ box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+      }
 
       .header-badge {
         font-size: 11px;
-        color: #555;
-        letter-spacing: 1px;
+        color: #71717a;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+        font-weight: 600;
       }
 
       /* ── Main ── */
@@ -47,29 +79,22 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        padding: 32px;
-        gap: 20px;
+        background: #ffffff;
       }
 
-      .label {
-        font-size: 11px;
-        font-weight: 600;
-        color: #444;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-      }
-
-      /* ── Configurator wrapper ── */
+      /* Full-height container configured to prevent nested layout scrollbars */
       #visify-configurator {
         width: 100%;
         flex: 1;
-        min-height: 500px;
+        /* min-height: 600px; */
+        /* height: 600px; Fixed context box height inside shopify section */
       }
 
-      /* ── Footer ── */
+      /* ── Footer ──
       footer {
-        padding: 16px 32px;
-        border-top: 1px solid rgba(255,255,255,0.06);
+        padding: 14px 24px;
+        border-top: 1px solid #e8e8ed;
+        background: #ffffff;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -78,35 +103,41 @@
 
       footer p {
         font-size: 11px;
-        color: #333;
-        letter-spacing: 0.5px;
+        color: #71717a;
+        letter-spacing: 0.02em;
+        font-weight: 400;
       }
 
       footer a {
-        color: #4F46E5;
-        text-decoration: none;
+        color: #121212;
+        text-decoration: underline;
+        font-weight: 500;
+        transition: color 0.15s;
       }
+      footer a:hover { color: #5a31f4; } */
     </style>
   </head>
   <body>
 
     <header>
       <div class="logo">VI<span>SI</span>FY</div>
-      <div class="header-badge">3D Configurator Demo</div>
+      <div class="header-right">
+        <div class="live-dot"></div>
+        <div class="header-badge">3D Preview</div>
+      </div>
     </header>
 
     <main>
-      <div class="label">Live Preview</div>
       <div id="visify-configurator"></div>
     </main>
 
-    <footer>
-      <p>Powered by <a href="#">Visify</a> — Embed 3D configurators on any store</p>
-    </footer>
+    <!-- <footer>
+      <p>Built with <a href="https://visify.io" target="_blank">Visify</a> — 3D Asset Configurator</p>
+    </footer> -->
 
     <script>
-  window.VISIFY_API_KEY = 'vis_26590bdf9626a15c721a99ef066c939f';
-  window.VISIFY_PRODUCT_ID = 'the-collection-snowboard-hydrogen';
+      window.VISIFY_API_KEY = 'vis_26590bdf9626a15c721a99ef066c939f';
+      window.VISIFY_PRODUCT_ID = 'the-collection-snowboard-hydrogen';
     </script>
     <script type="module" src="/src/index.js"></script>
 
