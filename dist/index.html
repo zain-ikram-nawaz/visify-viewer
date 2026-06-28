@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visify — 3D Configurator Demo</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #0a0a0a;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Header ── */
+      header {
+        padding: 0 32px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        flex-shrink: 0;
+      }
+
+      .logo {
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 3px;
+        color: #fff;
+        text-transform: uppercase;
+      }
+      .logo span { color: #4F46E5; }
+
+      .header-badge {
+        font-size: 11px;
+        color: #555;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+
+      /* ── Main ── */
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 32px;
+        gap: 20px;
+      }
+
+      .label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #444;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+
+      /* ── Configurator wrapper ── */
+      #visify-configurator {
+        width: 100%;
+        flex: 1;
+        min-height: 500px;
+      }
+
+      /* ── Footer ── */
+      footer {
+        padding: 16px 32px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      footer p {
+        font-size: 11px;
+        color: #333;
+        letter-spacing: 0.5px;
+      }
+
+      footer a {
+        color: #4F46E5;
+        text-decoration: none;
+      }
+    </style>
+    <script type="module" crossorigin src="/embed.iife.js"></script>
+  </head>
+  <body>
+
+    <header>
+      <div class="logo">VI<span>SI</span>FY</div>
+      <div class="header-badge">3D Configurator Demo</div>
+    </header>
+
+    <main>
+      <div class="label">Live Preview</div>
+      <div id="visify-configurator"></div>
+    </main>
+
+    <footer>
+      <p>Powered by <a href="#">Visify</a> — Embed 3D configurators on any store</p>
+    </footer>
+
+    <script>
+  window.VISIFY_API_KEY = 'vis_26590bdf9626a15c721a99ef066c939f';
+  window.VISIFY_PRODUCT_ID = 'the-collection-snowboard-hydrogen';
+    </script>
+
+  </body>
+</html>
