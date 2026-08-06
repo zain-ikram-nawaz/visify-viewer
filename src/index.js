@@ -4,11 +4,44 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 
 // ── Config ────────────────────────────────────────────────
-const API_BASE = 'https://visify-backend-production.up.railway.app/api';
+function normalizeApiBase(value) {
+  const base = (value || '').trim().replace(/\/$/, '');
+  if (!base) return 'http://localhost:5000/api';
+  return base.endsWith('/api') ? base : `${base}/api`;
+}
+
+const API_BASE = normalizeApiBase(window.VISIFY_API_URL || import.meta.env.VITE_API_BASE_URL);
+// Explicit API key is only set when a merchant uses the advanced override —
+// normally the block auto-detects the shop and no key is needed.
 const BRAND_API_KEY = window.VISIFY_API_KEY;
+const SHOP_DOMAIN = window.VISIFY_SHOP_DOMAIN;
 const PRODUCT_HANDLE = window.VISIFY_PRODUCT_ID;
+const CONFIGURATOR_ID = window.VISIFY_CONFIGURATOR_ID;
+
+function configuratorEndpoint() {
+  const isMongoId = typeof PRODUCT_HANDLE === 'string' && /^[a-f0-9]{24}$/i.test(PRODUCT_HANDLE);
+
+  if (isMongoId) {
+    return `${API_BASE}/public/products/${PRODUCT_HANDLE}`;
+  }
+
+  if (BRAND_API_KEY && PRODUCT_HANDLE) {
+    return `${API_BASE}/configurator/public/${BRAND_API_KEY}/${PRODUCT_HANDLE}`;
+  }
+
+  if (SHOP_DOMAIN && PRODUCT_HANDLE) {
+    return `${API_BASE}/configurator/public/by-shop/${SHOP_DOMAIN}/${PRODUCT_HANDLE}`;
+  }
+
+  if (CONFIGURATOR_ID) {
+    return `${API_BASE}/public/products/${CONFIGURATOR_ID}`;
+  }
+
+  return null;
+}
 
 let scene, camera, renderer, controls;
+let animationId = null;
 let loadedParts = {};
 let selectedVariants = {};
 let sessionId = null;
@@ -21,6 +54,8 @@ const loader = new GLTFLoader();
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 loader.setDRACOLoader(dracoLoader);
+const textureLoader = new THREE.TextureLoader();
+const textureCache = {};
 
 // ── CSS Redesign for Shopify Integration ───────────────────
 const style = document.createElement('style');
@@ -328,7 +363,17 @@ async function init() {
   `;
 
   try {
-    const res = await fetch(`${API_BASE}/configurator/public/${BRAND_API_KEY}/${PRODUCT_HANDLE}`);
+    const endpoint = configuratorEndpoint();
+    if (!endpoint) {
+      document.getElementById('visify-loading').innerHTML = `<p style="color:#ef4444;font-size:13px;">⚠️ Missing product identifier</p>`;
+      return;
+    }
+
+    const requestInit = BRAND_API_KEY
+      ? { headers: { 'X-API-Key': BRAND_API_KEY } }
+      : undefined;
+
+    const res = await fetch(endpoint, requestInit);
     const data = await res.json();
 
     if (!res.ok) {
@@ -336,14 +381,15 @@ async function init() {
       return;
     }
 
-    configuratorData = data.configurator;
+    configuratorData = data.configurator || data.product;
+    const brandData = data.brand || null;
     totalPrice = configuratorData.basePrice || 0;
 
     const sessionRes = await fetch(`${API_BASE}/configurator/session`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        brandId: data.brand.id,
+        brandId: brandData?.id || configuratorData.brandId,
         configuratorProductId: configuratorData._id,
       }),
     });
@@ -438,10 +484,23 @@ function setupThreeJS() {
 }
 
 function animate() {
-  requestAnimationFrame(animate);
+  animationId = requestAnimationFrame(animate);
   if (controls) controls.update();
   if (renderer && scene && camera) renderer.render(scene, camera);
 }
+
+// Explicitly release the GPU/WebGL context when the tab/page goes away —
+// without this, every page that ever loaded the viewer keeps its context
+// alive (rAF loop never stops), quickly exhausting the browser-wide WebGL
+// context limit on low-end/integrated GPUs and on most mobile browsers.
+function destroyViewer() {
+  if (animationId) cancelAnimationFrame(animationId);
+  if (renderer) {
+    renderer.dispose();
+    renderer.forceContextLoss?.();
+  }
+}
+window.addEventListener('pagehide', destroyViewer);
 
 function loadModel(url, id, isBase = false) {
   if (!url) return Promise.resolve(null);
@@ -495,16 +554,59 @@ function removePartFromScene(partId) {
   }
 }
 
-function applyColorToPart(partId, hexColor) {
+function forEachPartMaterial(partId, fn) {
   const group = loadedParts[partId];
   if (!group) return;
-  const color = new THREE.Color(hexColor);
   group.traverse((child) => {
     if (child.isMesh && child.material) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
-      mats.forEach(mat => { if (mat.color) mat.color.set(color); });
+      mats.forEach(fn);
     }
   });
+}
+
+function applyColorToPart(partId, hexColor) {
+  const color = new THREE.Color(hexColor);
+  forEachPartMaterial(partId, (mat) => {
+    if (mat.map) {
+      mat.map = null;
+      mat.needsUpdate = true;
+    }
+    if (mat.color) mat.color.set(color);
+  });
+}
+
+function applyTextureToPart(partId, textureUrl) {
+  if (!textureUrl) return;
+  const cached = textureCache[textureUrl];
+  const onLoaded = (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    forEachPartMaterial(partId, (mat) => {
+      if ('map' in mat) {
+        mat.map = texture;
+        if (mat.color) mat.color.set(0xffffff);
+        mat.needsUpdate = true;
+      }
+    });
+  };
+
+  if (cached) {
+    onLoaded(cached);
+    return;
+  }
+  textureLoader.load(textureUrl, (texture) => {
+    textureCache[textureUrl] = texture;
+    onLoaded(texture);
+  });
+}
+
+function applyVariantToPart(partId, variant) {
+  if (!variant) return;
+  if (variant.type === 'texture') {
+    applyTextureToPart(partId, variant.value);
+  } else {
+    applyColorToPart(partId, variant.value);
+  }
 }
 
 function updatePrice() {
@@ -564,16 +666,16 @@ function buildPartsPanel() {
           </div>
           ${hasVariants ? `
             <div class="v-variants ${isAdded ? 'open' : ''}" id="variants-${part._id}">
-              <div class="v-variant-label">Select Color</div>
+              <div class="v-variant-label">${part.variants.every(v => v.type === 'texture') ? 'Select Texture' : 'Select Option'}</div>
               <div class="v-swatches">
                 ${part.variants.map((v, i) => `
                   <button
                     class="v-swatch ${i === 0 ? 'active' : ''}"
-                    style="background:${v.type === 'color' ? v.value : '#71717a'}"
+                    style="background:${v.type === 'texture' ? `url('${v.value}') center/cover` : v.value}"
                     title="${v.label}"
                     data-part-id="${part._id}"
                     data-variant-id="${v._id}"
-                    data-color="${v.type === 'color' ? v.value : ''}"
+                    data-value="${v.value}"
                     data-type="${v.type}"
                   ></button>
                 `).join('')}
@@ -612,8 +714,8 @@ function buildPartsPanel() {
         document.getElementById(`dot-${partId}`)?.classList.add('active');
         document.getElementById(`variants-${partId}`)?.classList.add('open');
 
-        if (part.variants.length > 0 && part.variants[0].type === 'color') {
-          applyColorToPart(partId, part.variants[0].value);
+        if (part.variants.length > 0) {
+          applyVariantToPart(partId, part.variants[0]);
           selectedVariants[partId] = part.variants[0]._id;
           updatePrice();
         }
@@ -638,15 +740,15 @@ function buildPartsPanel() {
     swatch.addEventListener('click', () => {
       const partId = swatch.dataset.partId;
       const variantId = swatch.dataset.variantId;
-      const color = swatch.dataset.color;
+      const value = swatch.dataset.value;
       const type = swatch.dataset.type;
 
       list.querySelectorAll(`.v-swatch[data-part-id="${partId}"]`).forEach(s => s.classList.remove('active'));
       swatch.classList.add('active');
 
       selectedVariants[partId] = variantId;
-      if (type === 'color' && color && loadedParts[partId]) {
-        applyColorToPart(partId, color);
+      if (loadedParts[partId]) {
+        applyVariantToPart(partId, { type, value });
       }
       updatePrice();
     });
@@ -687,32 +789,27 @@ async function handleAddToCart() {
     });
     const cartData = await cartRes.json();
 
-    const properties = {};
-    cartData.shopifyCartData.properties.forEach(p => {
-      properties[p.name] = p.value;
-    });
-
-    const shopifyRes = await fetch('/cart/add.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: window.VISIFY_SHOPIFY_VARIANT_ID || 1,
-        quantity: 1,
-        properties,
-      }),
-    });
-
-    if (shopifyRes.ok) {
-      btn.textContent = 'Added to Bag!';
-      btn.style.background = '#10b981';
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = 'Add to Cart';
-        btn.style.background = '';
-      }, 2000);
-    } else {
-      throw new Error('Shopify API Exception');
+    if (!cartRes.ok || !cartData.shopifyCartData?.checkoutUrl) {
+      btn.disabled = false;
+      btn.textContent = cartData.message || 'Unavailable — try again';
+      return;
     }
+
+    if (cartData.shopifyCartData.isDevStub) {
+      // SKIP_DRAFT_ORDER=true on the backend — real Shopify Draft Order API
+      // isn't being called (Protected Customer Data access pending Shopify
+      // review), so there's nothing real to redirect to. Confirm the
+      // computed price/parts reached here correctly instead of silently
+      // landing on an empty native /cart page.
+      btn.textContent = `✅ Dev stub OK — $${cartData.shopifyCartData.totalPrice}`;
+      return;
+    }
+
+    // Redirects to a Shopify Draft Order checkout priced at the exact
+    // configured total (base + selected parts) — no native variant/cart
+    // involved, so there's no way for the charged price to drift from what
+    // was shown here.
+    window.location.href = cartData.shopifyCartData.checkoutUrl;
   } catch (err) {
     btn.disabled = false;
     btn.textContent = 'Add to Cart';
