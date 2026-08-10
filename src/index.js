@@ -6,7 +6,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // ── Config ────────────────────────────────────────────────
 function normalizeApiBase(value) {
   const base = (value || '').trim().replace(/\/$/, '');
-  if (!base) return 'http://localhost:5000/api';
+  if (!base) return 'https://visify-backend.zingcalc.com/api';
   return base.endsWith('/api') ? base : `${base}/api`;
 }
 
