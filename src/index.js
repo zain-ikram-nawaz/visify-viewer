@@ -57,38 +57,128 @@ loader.setDRACOLoader(dracoLoader);
 const textureLoader = new THREE.TextureLoader();
 const textureCache = {};
 
-// ── CSS Redesign for Shopify Integration ───────────────────
+// ── Host Theme Detection ────────────────────────────────────
+// Reads colors/font/radius from the merchant's own Shopify theme (or
+// whatever page the widget is embedded in) so the panel looks native
+// instead of imposing a fixed brand look. Falls back to neutral
+// defaults when nothing theme-like is found (e.g. dashboard preview).
+function readCssVar(styles, names) {
+  for (const name of names) {
+    const value = styles.getPropertyValue(name).trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function findHostButton() {
+  const selectors = [
+    '.product-form__submit',
+    'form[action*="/cart/add"] button[type="submit"]',
+    'button[name="add"]',
+    '.shopify-payment-button__button--unbranded',
+    '.btn', '.button', 'button[type="submit"]',
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el && el.offsetParent !== null) return el;
+  }
+  return null;
+}
+
+function detectHostTheme() {
+  const fallback = {
+    font: `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`,
+    text: '#1a1a1a',
+    bg: '#ffffff',
+    accent: '#1a1a1a',
+    accentContrast: '#ffffff',
+    radius: '8px',
+  };
+
+  try {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const bodyStyles = getComputedStyle(document.body);
+    const hostBtn = findHostButton();
+    const btnStyles = hostBtn ? getComputedStyle(hostBtn) : null;
+
+    const font = readCssVar(rootStyles, ['--font-body-family', '--font-family-base', '--body-font-family'])
+      || bodyStyles.fontFamily
+      || fallback.font;
+
+    const text = readCssVar(rootStyles, ['--color-base-text', '--color-text', '--color-foreground', '--text-color'])
+      || bodyStyles.color
+      || fallback.text;
+
+    const bg = readCssVar(rootStyles, ['--color-base-background-1', '--color-background', '--background-color'])
+      || fallback.bg;
+
+    const accent = readCssVar(rootStyles, ['--color-base-accent-1', '--color-accent', '--color-primary', '--color-button'])
+      || btnStyles?.backgroundColor
+      || fallback.accent;
+
+    const accentContrast = readCssVar(rootStyles, ['--color-base-solid-button-labels', '--color-button-text'])
+      || btnStyles?.color
+      || fallback.accentContrast;
+
+    let radius = readCssVar(rootStyles, ['--buttons-radius-outset', '--buttons-radius', '--inputs-radius-outset']);
+    if (radius == null && btnStyles) radius = btnStyles.borderRadius;
+    if (radius == null) radius = fallback.radius;
+
+    return { font, text, bg, accent, accentContrast, radius };
+  } catch {
+    return fallback;
+  }
+}
+
+function applyHostTheme(root) {
+  if (!root) return;
+  const theme = detectHostTheme();
+  root.style.setProperty('--v-font', theme.font);
+  root.style.setProperty('--v-text', theme.text);
+  root.style.setProperty('--v-bg', theme.bg);
+  root.style.setProperty('--v-accent', theme.accent);
+  root.style.setProperty('--v-accent-contrast', theme.accentContrast);
+  root.style.setProperty('--v-radius', theme.radius);
+}
+
+// ── CSS ──────────────────────────────────────────────────────
 const style = document.createElement('style');
 style.textContent = `
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-
   #visify-root * {
     margin: 0; padding: 0; box-sizing: border-box;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--v-font);
     -webkit-font-smoothing: antialiased;
   }
 
   #visify-root {
+    --v-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --v-text: #1a1a1a;
+    --v-bg: #ffffff;
+    --v-accent: #1a1a1a;
+    --v-accent-contrast: #ffffff;
+    --v-radius: 8px;
+
     width: 100%;
     height: 100%;
     display: flex;
-    background: #f4f4f7;
+    background: #fafafa;
     overflow: hidden;
     position: relative;
-    border: 1px solid #e8e8ed;
-    border-radius: 4px;
+    border: 1px solid #e5e5e5;
+    border-radius: var(--v-radius);
+    color: var(--v-text);
   }
 
   /* ── Canvas ── */
-  #visify-canvas { flex: 1; display: block; min-width: 0; cursor: grab; }
+  #visify-canvas { flex: 1; display: block; min-width: 0; cursor: grab; background: #fafafa; }
   #visify-canvas:active { cursor: grabbing; }
 
-  /* ── Shopify UI Side Panel ── */
+  /* ── Side Panel ── */
   #visify-panel {
-    width: 320px;
+    width: 340px;
     flex-shrink: 0;
-    background: #ffffff;
-    border-left: 1px solid #e8e8ed;
+    background: var(--v-bg);
+    border-left: 1px solid #ececec;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -96,23 +186,23 @@ style.textContent = `
 
   /* Panel Header */
   .v-panel-header {
-    padding: 24px 20px 16px;
-    border-bottom: 1px solid #f4f4f7;
+    padding: 28px 24px 18px;
+    border-bottom: 1px solid #f0f0f0;
     flex-shrink: 0;
   }
 
   .v-product-name {
-    color: #121212;
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    color: var(--v-text);
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
   }
 
   .v-brand-name {
-    color: #71717a;
-    font-size: 12px;
-    margin-top: 4px;
+    color: #8a8a8a;
+    font-size: 13px;
+    margin-top: 6px;
     font-weight: 400;
   }
 
@@ -121,45 +211,42 @@ style.textContent = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
-    background: #fafafa;
-    border-bottom: 1px solid #e8e8ed;
+    padding: 18px 24px;
+    border-bottom: 1px solid #f0f0f0;
     flex-shrink: 0;
   }
 
   .v-price-label {
-    color: #121212;
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    font-weight: 600;
+    color: #8a8a8a;
+    font-size: 13px;
+    font-weight: 500;
   }
 
   .v-price-value {
-    color: #121212;
-    font-size: 20px;
-    font-weight: 700;
+    color: var(--v-text);
+    font-size: 22px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
-  /* Parts container style (clean wrap, no inner desktop scrollbars visible) */
+  /* Parts container */
   .v-parts-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 0;
+    padding: 16px 0;
   }
   .v-parts-scroll::-webkit-scrollbar { width: 4px; }
   .v-parts-scroll::-webkit-scrollbar-track { background: transparent; }
-  .v-parts-scroll::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 2px; }
+  .v-parts-scroll::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 2px; }
 
   /* Category label */
   .v-cat-label {
-    padding: 12px 20px 6px;
+    padding: 14px 24px 8px;
     font-size: 11px;
-    color: #a1a1aa;
+    color: #a0a0a0;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   /* Part rows */
@@ -172,26 +259,26 @@ style.textContent = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    padding: 12px;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: calc(var(--v-radius) * 0.6);
     border: 1px solid transparent;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease;
   }
-  .v-part-header:hover { background: #f4f4f7; }
+  .v-part-header:hover { background: #f6f6f6; }
 
   .v-part-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
-    color: #27272a;
+    color: var(--v-text);
     display: flex;
     align-items: center;
     gap: 10px;
   }
 
   .v-part-price {
-    font-size: 12px;
-    color: #71717a;
+    font-size: 13px;
+    color: #8a8a8a;
     font-weight: 400;
   }
 
@@ -200,30 +287,28 @@ style.textContent = `
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #e4e4e7;
-    transition: all 0.2s;
+    background: #d8d8d8;
+    transition: background 0.2s;
   }
   .v-part-dot.active {
-    background: #5a31f4;
+    background: var(--v-accent);
   }
 
   .v-part-section:has(.v-part-dot.active) .v-part-header {
-    background: #fbfbfe;
-    border-color: #e2dbfe;
+    background: #fafafa;
   }
   .v-part-section:has(.v-part-dot.active) .v-part-name {
     font-weight: 600;
-    color: #5a31f4;
   }
 
-  /* Buttons styling mimicking premium theme presets */
+  /* Toggle buttons */
   .v-part-toggle {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid #e4e4e7;
+    width: 26px;
+    height: 26px;
+    border-radius: calc(var(--v-radius) * 0.5);
+    border: 1px solid #ddd;
     background: #ffffff;
-    color: #27272a;
+    color: var(--v-text);
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -232,75 +317,72 @@ style.textContent = `
     justify-content: center;
     transition: all 0.15s;
   }
-  .v-part-toggle:hover { border-color: #5a31f4; color: #5a31f4; }
-  .v-part-toggle.added { border-color: #5a31f4; background: #5a31f4; color: #ffffff; }
+  .v-part-toggle:hover { border-color: var(--v-accent); color: var(--v-accent); }
+  .v-part-toggle.added { border-color: var(--v-accent); background: var(--v-accent); color: var(--v-accent-contrast); }
 
-  /* Swatches Design */
+  /* Swatches */
   .v-variants {
-    padding: 8px 12px 12px 28px;
+    padding: 10px 12px 14px 28px;
     display: none;
   }
   .v-variants.open { display: block; }
 
   .v-variant-label {
-    font-size: 11px;
-    color: #71717a;
-    margin-bottom: 8px;
+    font-size: 12px;
+    color: #8a8a8a;
+    margin-bottom: 10px;
     font-weight: 500;
   }
 
-  .v-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .v-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
 
   .v-swatch {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
-    border: 1px solid rgba(0,0,0,0.1);
+    border: 1px solid rgba(0,0,0,0.12);
     outline: 2px solid transparent;
     outline-offset: 2px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: transform 0.15s, outline-color 0.15s;
     position: relative;
   }
-  .v-swatch:hover { transform: scale(1.1); }
-  .v-swatch.active { outline-color: #5a31f4; }
+  .v-swatch:hover { transform: scale(1.08); }
+  .v-swatch.active { outline-color: var(--v-accent); }
 
-  /* Checkout Call To Action */
+  /* Checkout CTA */
   .v-cart-section {
-    padding: 18px 20px;
-    border-top: 1px solid #e8e8ed;
-    background: #ffffff;
+    padding: 20px 24px;
+    border-top: 1px solid #f0f0f0;
+    background: var(--v-bg);
     flex-shrink: 0;
   }
 
   .v-cart-btn {
     width: 100%;
-    background: #121212; /* Shopify bold checkout configuration styling */
-    color: #ffffff;
+    background: var(--v-accent);
+    color: var(--v-accent-contrast);
     border: none;
-    padding: 15px 18px;
-    border-radius: 4px;
-    font-size: 14px;
+    padding: 16px 18px;
+    border-radius: var(--v-radius);
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease;
-    letter-spacing: 0.02em;
+    transition: opacity 0.2s ease;
   }
-  .v-cart-btn:hover {
-    background: #2a2a2a;
-  }
+  .v-cart-btn:hover { opacity: 0.88; }
   .v-cart-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .v-powered {
     text-align: center;
-    padding-top: 12px;
-    font-size: 10px;
-    color: #a1a1aa;
+    padding-top: 14px;
+    font-size: 11px;
+    color: #a0a0a0;
     font-weight: 400;
   }
-  .v-powered a { color: #71717a; text-decoration: none; font-weight: 500; }
+  .v-powered a { color: #8a8a8a; text-decoration: none; font-weight: 500; }
 
-  /* Loading State overlay setup */
+  /* Loading overlay */
   #visify-loading {
     position: absolute;
     inset: 0;
@@ -315,34 +397,34 @@ style.textContent = `
 
   .v-spinner {
     width: 32px; height: 32px;
-    border: 2px solid #f4f4f7;
-    border-top-color: #5a31f4;
+    border: 2px solid #f0f0f0;
+    border-top-color: var(--v-accent);
     border-radius: 50%;
     animation: v-spin 0.8s linear infinite;
   }
   @keyframes v-spin { to { transform: rotate(360deg); } }
 
   .v-loading-logo {
-    color: #121212;
+    color: var(--v-text);
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: 0.1em;
   }
-  .v-loading-logo span { color: #5a31f4; }
+  .v-loading-logo span { color: var(--v-accent); }
 
   .v-progress {
     width: 120px;
     height: 2px;
-    background: #f4f4f7;
+    background: #f0f0f0;
     overflow: hidden;
   }
-  .v-progress-fill { height: 100%; background: #5a31f4; width: 0%; transition: width 0.2s ease; }
+  .v-progress-fill { height: 100%; background: var(--v-accent); width: 0%; transition: width 0.2s ease; }
 
-  /* Responsive Rules */
+  /* Responsive */
   @media (max-width: 768px) {
     #visify-root { flex-direction: column; height: auto; }
     #visify-canvas { height: 320px; }
-    #visify-panel { width: 100%; border-left: none; border-top: 1px solid #e8e8ed; }
+    #visify-panel { width: 100%; border-left: none; border-top: 1px solid #ececec; }
   }
 `;
 document.head.appendChild(style);
@@ -361,6 +443,7 @@ async function init() {
       </div>
     </div>
   `;
+  applyHostTheme(document.getElementById('visify-root'));
 
   try {
     const endpoint = configuratorEndpoint();
@@ -450,8 +533,7 @@ function setupThreeJS() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   scene = new THREE.Scene();
-  // Changed background color configuration interface for crisp e-com look
-  scene.background = new THREE.Color('#f4f4f7');
+  scene.background = new THREE.Color('#fafafa');
 
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
