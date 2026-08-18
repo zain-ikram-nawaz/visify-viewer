@@ -156,11 +156,40 @@ function applyHostTheme(root) {
 // ── CSS ──────────────────────────────────────────────────────
 // Styles live in ./visify.css (kept as a separate file so it can be
 // cached independently and edited without touching the widget script).
-// Resolved relative to this module so it works regardless of where the
-// host page includes the script from.
+//
+// NOTE: we deliberately avoid `import.meta.url` here — it throws unless
+// this exact file is evaluated as a real ES module, which isn't
+// guaranteed once it goes through a bundler or gets embedded as a plain
+// <script> on a merchant's site. Instead we resolve the CSS path from
+// the actual <script> tag's own src, which works in every case, and we
+// allow an explicit override for setups that host the CSS elsewhere.
+function resolveScriptUrl() {
+  try {
+    if (document.currentScript && document.currentScript.src) {
+      return document.currentScript.src;
+    }
+  } catch {}
+  // Fallback: last <script> on the page that looks like this widget.
+  const scripts = document.querySelectorAll('script[src*="index"]');
+  const match = scripts[scripts.length - 1];
+  return match ? match.src : null;
+}
+
 function loadStylesheet() {
-  const href = new URL('./visify.css', import.meta.url).href;
-  if (document.querySelector(`link[data-visify-styles]`)) return;
+  if (document.querySelector('link[data-visify-styles]')) return;
+
+  // Explicit override always wins, for setups that host the CSS elsewhere.
+  let href = window.VISIFY_CSS_URL || null;
+
+  if (!href) {
+    const scriptUrl = resolveScriptUrl();
+    try {
+      href = scriptUrl ? new URL('./visify.css', scriptUrl).href : 'visify.css';
+    } catch {
+      href = 'visify.css';
+    }
+  }
+
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;
@@ -244,7 +273,7 @@ async function init() {
       <div class="v-panel-header">
         <div class="v-product-name">${escapeHtml(configuratorData.name)}</div>
         <div class="v-brand-name">Customize Option Layout</div>
-  </div>
+      </div>
       <div class="v-price-row">
         <span class="v-price-label">Total Price</span>
         <span class="v-price-value" id="v-total-price">$${totalPrice.toFixed(2)}</span>
