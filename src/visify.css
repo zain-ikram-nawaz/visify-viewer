@@ -1,0 +1,393 @@
+:where(#visify-root) * {
+  margin: 0; padding: 0; box-sizing: border-box;
+  font-family: var(--v-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+#visify-root {
+  --v-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --v-text: #1a1a1a;
+  --v-bg: #ffffff;
+  --v-accent: #1a1a1a;
+  --v-accent-contrast: #ffffff;
+  --v-radius: 8px;
+
+  width: 100%;
+  height: 100%;
+  display: flex;
+  background: #fafafa;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid #e5e5e5;
+  border-radius: var(--v-radius);
+  color: var(--v-text);
+}
+
+/* ── Canvas ── */
+.v-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+#visify-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  background: #fafafa;
+}
+#visify-canvas:active { cursor: grabbing; }
+
+/* Floating hint shown once the model is in view, fades after a few seconds
+   or as soon as the user starts orbiting. */
+.v-canvas-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.v-canvas-hint.v-hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+/* Base-model error state — covers the canvas so it never sits empty/blank
+   with no explanation when the GLTF fails to load. */
+.v-canvas-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: #fafafa;
+}
+
+.v-canvas-error-icon {
+  font-size: 26px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.v-canvas-error-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--v-text);
+}
+
+.v-canvas-error-desc {
+  font-size: 12px;
+  color: #8a8a8a;
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+.v-canvas-retry {
+  margin-top: 8px;
+  padding: 8px 20px;
+  border-radius: var(--v-radius);
+  border: 1px solid #ddd;
+  background: #ffffff;
+  color: var(--v-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.v-canvas-retry:hover { border-color: var(--v-accent); color: var(--v-accent); }
+.v-canvas-retry:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Side Panel ── */
+#visify-panel {
+  width: 340px;
+  flex-shrink: 0;
+  background: var(--v-bg);
+  border-left: 1px solid #ececec;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Panel Header */
+.v-panel-header {
+  padding: 28px 24px 18px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.v-product-name {
+  color: var(--v-text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.v-brand-name {
+  color: #8a8a8a;
+  font-size: 13px;
+  margin-top: 6px;
+  font-weight: 400;
+}
+
+/* Configurator description, shown under the product name when present */
+.v-desc {
+  color: #5a5a5a;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-top: 10px;
+}
+
+/* Price Layout */
+.v-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.v-price-label {
+  color: #8a8a8a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.v-price-value {
+  color: var(--v-text);
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Parts container */
+.v-parts-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+.v-parts-scroll::-webkit-scrollbar { width: 4px; }
+.v-parts-scroll::-webkit-scrollbar-track { background: transparent; }
+.v-parts-scroll::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 2px; }
+
+/* Category label */
+.v-cat-label {
+  padding: 14px 24px 8px;
+  font-size: 11px;
+  color: #a0a0a0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Part rows */
+.v-part-section {
+  padding: 0 16px;
+  margin-bottom: 4px;
+}
+
+.v-part-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  cursor: pointer;
+  border-radius: calc(var(--v-radius) * 0.6);
+  border: 1px solid transparent;
+  transition: background 0.15s ease;
+}
+.v-part-header:hover { background: #f6f6f6; }
+
+.v-part-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--v-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.v-part-price {
+  font-size: 13px;
+  color: #8a8a8a;
+  font-weight: 400;
+}
+
+/* Per-part description, shown under the header when supplied */
+.v-part-desc {
+  padding: 0 12px 8px 28px;
+  margin-top: -4px;
+  font-size: 12px;
+  color: #9a9a9a;
+  line-height: 1.45;
+}
+
+/* Inline error shown briefly if a part's model fails to load */
+.v-part-error {
+  padding: 0 12px 10px 28px;
+  margin-top: -4px;
+  font-size: 12px;
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* Active dynamic states */
+.v-part-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d8d8d8;
+  transition: background 0.2s;
+}
+.v-part-dot.active {
+  background: var(--v-accent);
+}
+
+.v-part-section:has(.v-part-dot.active) .v-part-header {
+  background: #fafafa;
+}
+.v-part-section:has(.v-part-dot.active) .v-part-name {
+  font-weight: 600;
+}
+
+/* Toggle buttons */
+.v-part-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--v-radius) * 0.5);
+  border: 1px solid #ddd;
+  background: #ffffff;
+  color: var(--v-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.v-part-toggle:hover { border-color: var(--v-accent); color: var(--v-accent); }
+.v-part-toggle.added { border-color: var(--v-accent); background: var(--v-accent); color: var(--v-accent-contrast); }
+.v-part-toggle:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Swatches */
+.v-variants {
+  padding: 10px 12px 14px 28px;
+  display: none;
+}
+.v-variants.open { display: block; }
+
+.v-variant-label {
+  font-size: 12px;
+  color: #8a8a8a;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.v-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.v-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  cursor: pointer;
+  transition: transform 0.15s, outline-color 0.15s;
+  position: relative;
+}
+.v-swatch:hover { transform: scale(1.08); }
+.v-swatch.active { outline-color: var(--v-accent); }
+
+/* Checkout CTA */
+.v-cart-section {
+  padding: 20px 24px;
+  border-top: 1px solid #f0f0f0;
+  background: var(--v-bg);
+  flex-shrink: 0;
+}
+
+.v-cart-btn {
+  width: 100%;
+  background: var(--v-accent);
+  color: var(--v-accent-contrast);
+  border: none;
+  padding: 16px 18px;
+  border-radius: var(--v-radius);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+.v-cart-btn:hover { opacity: 0.88; }
+.v-cart-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.v-powered {
+  text-align: center;
+  padding-top: 14px;
+  font-size: 11px;
+  color: #a0a0a0;
+  font-weight: 400;
+}
+.v-powered a { color: #8a8a8a; text-decoration: none; font-weight: 500; }
+
+/* Loading overlay */
+#visify-loading {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 20;
+}
+
+.v-spinner {
+  width: 32px; height: 32px;
+  border: 2px solid #f0f0f0;
+  border-top-color: var(--v-accent);
+  border-radius: 50%;
+  animation: v-spin 0.8s linear infinite;
+}
+@keyframes v-spin { to { transform: rotate(360deg); } }
+
+.v-loading-logo {
+  color: var(--v-text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.v-loading-logo span { color: var(--v-accent); }
+
+.v-progress {
+  width: 120px;
+  height: 2px;
+  background: #f0f0f0;
+  overflow: hidden;
+}
+.v-progress-fill { height: 100%; background: var(--v-accent); width: 0%; transition: width 0.2s ease; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  #visify-root { flex-direction: column; height: auto; }
+  .v-canvas-wrap { height: 320px; }
+  #visify-panel { width: 100%; border-left: none; border-top: 1px solid #ececec; }
+}

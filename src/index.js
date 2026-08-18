@@ -48,6 +48,7 @@ let sessionId = null;
 let configuratorData = null;
 let totalPrice = 0;
 let baseModelCenter = new THREE.Vector3();
+let canvasHintTimer = null;
 
 // ── Loader ────────────────────────────────────────────────
 const loader = new GLTFLoader();
@@ -56,6 +57,17 @@ dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5
 loader.setDRACOLoader(dracoLoader);
 const textureLoader = new THREE.TextureLoader();
 const textureCache = {};
+
+// ── Small utils ───────────────────────────────────────────
+function escapeHtml(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // ── Host Theme Detection ────────────────────────────────────
 // Reads colors/font/radius from the merchant's own Shopify theme (or
@@ -142,292 +154,20 @@ function applyHostTheme(root) {
 }
 
 // ── CSS ──────────────────────────────────────────────────────
-const style = document.createElement('style');
-style.textContent = `
-  #visify-root * {
-    margin: 0; padding: 0; box-sizing: border-box;
-    font-family: var(--v-font);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  #visify-root {
-    --v-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    --v-text: #1a1a1a;
-    --v-bg: #ffffff;
-    --v-accent: #1a1a1a;
-    --v-accent-contrast: #ffffff;
-    --v-radius: 8px;
-
-    width: 100%;
-    height: 100%;
-    display: flex;
-    background: #fafafa;
-    overflow: hidden;
-    position: relative;
-    border: 1px solid #e5e5e5;
-    border-radius: var(--v-radius);
-    color: var(--v-text);
-  }
-
-  /* ── Canvas ── */
-  #visify-canvas { flex: 1; display: block; min-width: 0; cursor: grab; background: #fafafa; }
-  #visify-canvas:active { cursor: grabbing; }
-
-  /* ── Side Panel ── */
-  #visify-panel {
-    width: 340px;
-    flex-shrink: 0;
-    background: var(--v-bg);
-    border-left: 1px solid #ececec;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* Panel Header */
-  .v-panel-header {
-    padding: 28px 24px 18px;
-    border-bottom: 1px solid #f0f0f0;
-    flex-shrink: 0;
-  }
-
-  .v-product-name {
-    color: var(--v-text);
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.25;
-    letter-spacing: -0.01em;
-  }
-
-  .v-brand-name {
-    color: #8a8a8a;
-    font-size: 13px;
-    margin-top: 6px;
-    font-weight: 400;
-  }
-
-  /* Price Layout */
-  .v-price-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 24px;
-    border-bottom: 1px solid #f0f0f0;
-    flex-shrink: 0;
-  }
-
-  .v-price-label {
-    color: #8a8a8a;
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  .v-price-value {
-    color: var(--v-text);
-    font-size: 22px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Parts container */
-  .v-parts-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 0;
-  }
-  .v-parts-scroll::-webkit-scrollbar { width: 4px; }
-  .v-parts-scroll::-webkit-scrollbar-track { background: transparent; }
-  .v-parts-scroll::-webkit-scrollbar-thumb { background: #e0e0e0; border-radius: 2px; }
-
-  /* Category label */
-  .v-cat-label {
-    padding: 14px 24px 8px;
-    font-size: 11px;
-    color: #a0a0a0;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-
-  /* Part rows */
-  .v-part-section {
-    padding: 0 16px;
-    margin-bottom: 4px;
-  }
-
-  .v-part-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    cursor: pointer;
-    border-radius: calc(var(--v-radius) * 0.6);
-    border: 1px solid transparent;
-    transition: background 0.15s ease;
-  }
-  .v-part-header:hover { background: #f6f6f6; }
-
-  .v-part-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--v-text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .v-part-price {
-    font-size: 13px;
-    color: #8a8a8a;
-    font-weight: 400;
-  }
-
-  /* Active dynamic states */
-  .v-part-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #d8d8d8;
-    transition: background 0.2s;
-  }
-  .v-part-dot.active {
-    background: var(--v-accent);
-  }
-
-  .v-part-section:has(.v-part-dot.active) .v-part-header {
-    background: #fafafa;
-  }
-  .v-part-section:has(.v-part-dot.active) .v-part-name {
-    font-weight: 600;
-  }
-
-  /* Toggle buttons */
-  .v-part-toggle {
-    width: 26px;
-    height: 26px;
-    border-radius: calc(var(--v-radius) * 0.5);
-    border: 1px solid #ddd;
-    background: #ffffff;
-    color: var(--v-text);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-  }
-  .v-part-toggle:hover { border-color: var(--v-accent); color: var(--v-accent); }
-  .v-part-toggle.added { border-color: var(--v-accent); background: var(--v-accent); color: var(--v-accent-contrast); }
-
-  /* Swatches */
-  .v-variants {
-    padding: 10px 12px 14px 28px;
-    display: none;
-  }
-  .v-variants.open { display: block; }
-
-  .v-variant-label {
-    font-size: 12px;
-    color: #8a8a8a;
-    margin-bottom: 10px;
-    font-weight: 500;
-  }
-
-  .v-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
-
-  .v-swatch {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid rgba(0,0,0,0.12);
-    outline: 2px solid transparent;
-    outline-offset: 2px;
-    cursor: pointer;
-    transition: transform 0.15s, outline-color 0.15s;
-    position: relative;
-  }
-  .v-swatch:hover { transform: scale(1.08); }
-  .v-swatch.active { outline-color: var(--v-accent); }
-
-  /* Checkout CTA */
-  .v-cart-section {
-    padding: 20px 24px;
-    border-top: 1px solid #f0f0f0;
-    background: var(--v-bg);
-    flex-shrink: 0;
-  }
-
-  .v-cart-btn {
-    width: 100%;
-    background: var(--v-accent);
-    color: var(--v-accent-contrast);
-    border: none;
-    padding: 16px 18px;
-    border-radius: var(--v-radius);
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.2s ease;
-  }
-  .v-cart-btn:hover { opacity: 0.88; }
-  .v-cart-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .v-powered {
-    text-align: center;
-    padding-top: 14px;
-    font-size: 11px;
-    color: #a0a0a0;
-    font-weight: 400;
-  }
-  .v-powered a { color: #8a8a8a; text-decoration: none; font-weight: 500; }
-
-  /* Loading overlay */
-  #visify-loading {
-    position: absolute;
-    inset: 0;
-    background: #ffffff;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    z-index: 20;
-  }
-
-  .v-spinner {
-    width: 32px; height: 32px;
-    border: 2px solid #f0f0f0;
-    border-top-color: var(--v-accent);
-    border-radius: 50%;
-    animation: v-spin 0.8s linear infinite;
-  }
-  @keyframes v-spin { to { transform: rotate(360deg); } }
-
-  .v-loading-logo {
-    color: var(--v-text);
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-  }
-  .v-loading-logo span { color: var(--v-accent); }
-
-  .v-progress {
-    width: 120px;
-    height: 2px;
-    background: #f0f0f0;
-    overflow: hidden;
-  }
-  .v-progress-fill { height: 100%; background: var(--v-accent); width: 0%; transition: width 0.2s ease; }
-
-  /* Responsive */
-  @media (max-width: 768px) {
-    #visify-root { flex-direction: column; height: auto; }
-    #visify-canvas { height: 320px; }
-    #visify-panel { width: 100%; border-left: none; border-top: 1px solid #ececec; }
-  }
-`;
-document.head.appendChild(style);
+// Styles live in ./visify.css (kept as a separate file so it can be
+// cached independently and edited without touching the widget script).
+// Resolved relative to this module so it works regardless of where the
+// host page includes the script from.
+function loadStylesheet() {
+  const href = new URL('./visify.css', import.meta.url).href;
+  if (document.querySelector(`link[data-visify-styles]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.setAttribute('data-visify-styles', 'true');
+  document.head.appendChild(link);
+}
+loadStylesheet();
 
 // ── Init ──────────────────────────────────────────────────
 async function init() {
@@ -460,7 +200,7 @@ async function init() {
     const data = await res.json();
 
     if (!res.ok) {
-      document.getElementById('visify-loading').innerHTML = `<p style="color:#ef4444;font-size:13px;">⚠️ ${data.message}</p>`;
+      document.getElementById('visify-loading').innerHTML = `<p style="color:#ef4444;font-size:13px;">⚠️ ${escapeHtml(data.message)}</p>`;
       return;
     }
 
@@ -490,12 +230,21 @@ async function init() {
       <div class="v-loading-logo">VI<span>SI</span>FY</div>
       <div class="v-progress"><div class="v-progress-fill" id="v-fill"></div></div>
     </div>
-    <canvas id="visify-canvas"></canvas>
+    <div class="v-canvas-wrap">
+      <canvas id="visify-canvas"></canvas>
+      <div class="v-canvas-hint" id="v-canvas-hint">Drag to rotate · Scroll to zoom</div>
+      <div class="v-canvas-error" id="v-canvas-error" style="display:none;">
+        <div class="v-canvas-error-icon">⚠️</div>
+        <div class="v-canvas-error-title">Couldn't load 3D preview</div>
+        <div class="v-canvas-error-desc" id="v-canvas-error-desc">There was a problem loading the base model.</div>
+        <button class="v-canvas-retry" id="v-canvas-retry" type="button">Retry</button>
+      </div>
+    </div>
     <div id="visify-panel">
       <div class="v-panel-header">
-        <div class="v-product-name">${configuratorData.name}</div>
+        <div class="v-product-name">${escapeHtml(configuratorData.name)}</div>
         <div class="v-brand-name">Customize Option Layout</div>
-      </div>
+  </div>
       <div class="v-price-row">
         <span class="v-price-label">Total Price</span>
         <span class="v-price-value" id="v-total-price">$${totalPrice.toFixed(2)}</span>
@@ -509,23 +258,35 @@ async function init() {
   `;
 
   setupThreeJS();
-  await loadModel(configuratorData.baseModelUrl, 'base', true);
+
+  const baseGroup = await loadModel(configuratorData.baseModelUrl, 'base', true);
   buildPartsPanel();
 
   for (const part of configuratorData.parts) {
     if (part.isDefault || part.isRequired) {
-      await addPartToScene(part);
+      const group = await addPartToScene(part);
+      if (!group) console.warn(`[Visify] Failed to load required part: ${part.name}`);
     }
   }
 
   document.getElementById('v-cart-btn').addEventListener('click', handleAddToCart);
+  document.getElementById('v-canvas-retry').addEventListener('click', retryBaseModel);
   document.getElementById('visify-loading').style.display = 'none';
+
+  if (baseGroup) {
+    showCanvasHint();
+  } else {
+    showCanvasError(
+      configuratorData.baseModelUrl
+        ? "The base model couldn't be loaded. Check your connection and try again."
+        : 'This configurator is missing a base model.'
+    );
+  }
 }
 
 // ── Three.js Layout Engine Setup ──────────────────────────
 function setupThreeJS() {
   const canvas = document.getElementById('visify-canvas');
-  const root = document.getElementById('visify-root');
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -552,6 +313,9 @@ function setupThreeJS() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.maxPolarAngle = Math.PI / 2; // Prevents camera from going under floor grid
+  controls.addEventListener('start', () => {
+    document.getElementById('v-canvas-hint')?.classList.add('v-hidden');
+  });
 
   const resizeObserver = new ResizeObserver(() => {
     const width = canvas.clientWidth;
@@ -583,6 +347,45 @@ function destroyViewer() {
   }
 }
 window.addEventListener('pagehide', destroyViewer);
+
+// ── Canvas empty / hint / error states ─────────────────────
+function showCanvasHint() {
+  const hint = document.getElementById('v-canvas-hint');
+  if (!hint) return;
+  hint.classList.remove('v-hidden');
+  clearTimeout(canvasHintTimer);
+  canvasHintTimer = setTimeout(() => hint.classList.add('v-hidden'), 4000);
+}
+
+function showCanvasError(message) {
+  const errorEl = document.getElementById('v-canvas-error');
+  const descEl = document.getElementById('v-canvas-error-desc');
+  const hintEl = document.getElementById('v-canvas-hint');
+  if (descEl && message) descEl.textContent = message;
+  hintEl?.classList.add('v-hidden');
+  if (errorEl) errorEl.style.display = 'flex';
+}
+
+function hideCanvasError() {
+  const errorEl = document.getElementById('v-canvas-error');
+  if (errorEl) errorEl.style.display = 'none';
+}
+
+async function retryBaseModel() {
+  const retryBtn = document.getElementById('v-canvas-retry');
+  if (!configuratorData?.baseModelUrl) return;
+  if (retryBtn) { retryBtn.disabled = true; retryBtn.textContent = 'Retrying…'; }
+
+  const group = await loadModel(configuratorData.baseModelUrl, 'base', true);
+
+  if (group) {
+    hideCanvasError();
+    showCanvasHint();
+  } else if (retryBtn) {
+    retryBtn.disabled = false;
+    retryBtn.textContent = 'Retry';
+  }
+}
 
 function loadModel(url, id, isBase = false) {
   if (!url) return Promise.resolve(null);
@@ -616,15 +419,19 @@ function loadModel(url, id, isBase = false) {
           fillEl.style.width = pct + '%';
         }
       },
-      () => resolve(null)
+      (err) => {
+        console.error(`[Visify] Failed to load model (${isBase ? 'base' : id}):`, url, err);
+        resolve(null);
+      }
     );
   });
 }
 
 async function addPartToScene(part) {
-  if (loadedParts[part._id]) return;
-  await loadModel(part.modelUrl, part._id);
-  updatePrice();
+  if (loadedParts[part._id]) return loadedParts[part._id];
+  const group = await loadModel(part.modelUrl, part._id);
+  if (group) updatePrice();
+  return group;
 }
 
 function removePartFromScene(partId) {
@@ -707,6 +514,23 @@ function updatePrice() {
   if (priceEl) priceEl.textContent = `$${totalPrice.toFixed(2)}`;
 }
 
+// ── Part error state (inline, auto-clears) ─────────────────
+function showPartError(partId) {
+  const header = document.querySelector(`.v-part-header[data-part-id="${partId}"]`);
+  const section = header?.closest('.v-part-section');
+  if (!header || !section) return;
+
+  let msg = section.querySelector('.v-part-error');
+  if (!msg) {
+    msg = document.createElement('div');
+    msg.className = 'v-part-error';
+    msg.textContent = "Couldn't load this option — try again";
+    header.insertAdjacentElement('afterend', msg);
+  }
+  clearTimeout(msg._hideTimer);
+  msg._hideTimer = setTimeout(() => msg.remove(), 4000);
+}
+
 function buildPartsPanel() {
   const list = document.getElementById('v-parts-list');
   if (!list) return;
@@ -725,7 +549,7 @@ function buildPartsPanel() {
 
   let html = '';
   Object.entries(categories).forEach(([cat, parts]) => {
-    html += `<div class="v-cat-label">${cat}</div>`;
+    html += `<div class="v-cat-label">${escapeHtml(cat)}</div>`;
     parts.forEach(part => {
       const isAdded = !!loadedParts[part._id];
       const hasVariants = part.variants.length > 0;
@@ -735,7 +559,7 @@ function buildPartsPanel() {
           <div class="v-part-header" data-part-id="${part._id}">
             <div class="v-part-name">
               <span class="v-part-dot ${isAdded ? 'active' : ''}" id="dot-${part._id}"></span>
-              ${part.name}
+              ${escapeHtml(part.name)}
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               ${part.basePrice > 0 ? `<span class="v-part-price">+$${part.basePrice}</span>` : ''}
@@ -746,6 +570,7 @@ function buildPartsPanel() {
               ` : ''}
             </div>
           </div>
+          ${part.description ? `<div class="v-part-desc">${escapeHtml(part.description)}</div>` : ''}
           ${hasVariants ? `
             <div class="v-variants ${isAdded ? 'open' : ''}" id="variants-${part._id}">
               <div class="v-variant-label">${part.variants.every(v => v.type === 'texture') ? 'Select Texture' : 'Select Option'}</div>
@@ -754,7 +579,7 @@ function buildPartsPanel() {
                   <button
                     class="v-swatch ${i === 0 ? 'active' : ''}"
                     style="background:${v.type === 'texture' ? `url('${v.value}') center/cover` : v.value}"
-                    title="${v.label}"
+                    title="${escapeHtml(v.label)}"
                     data-part-id="${part._id}"
                     data-variant-id="${v._id}"
                     data-value="${v.value}"
@@ -789,8 +614,16 @@ function buildPartsPanel() {
         document.getElementById(`variants-${partId}`)?.classList.remove('open');
       } else {
         btn.disabled = true;
-        await addPartToScene(part);
+        btn.textContent = '…';
+        const group = await addPartToScene(part);
         btn.disabled = false;
+
+        if (!group) {
+          btn.textContent = '+';
+          showPartError(partId);
+          return;
+        }
+
         btn.classList.add('added');
         btn.textContent = '✓';
         document.getElementById(`dot-${partId}`)?.classList.add('active');
