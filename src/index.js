@@ -74,6 +74,16 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+async function readJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    const contentType = response.headers.get('content-type') || 'unknown content type';
+    throw new Error(`Configurator API returned a non-JSON response (${response.status}, ${contentType}). Check the API URL.`);
+  }
+}
+
 function formatMoney(value) {
   const amount = Number(value) || 0;
   const currency = configuratorData?.currencyCode || 'USD';
@@ -241,7 +251,7 @@ async function init() {
       : undefined;
 
     const res = await fetch(endpoint, requestInit);
-    const data = await res.json();
+    const data = await readJsonResponse(res);
 
     if (!res.ok) {
       document.getElementById('visify-loading').innerHTML = `<p style="color:#ef4444;font-size:13px;">⚠️ ${escapeHtml(data.message)}</p>`;
@@ -260,7 +270,7 @@ async function init() {
         configuratorProductId: configuratorData._id,
       }),
     });
-    const sessionData = await sessionRes.json();
+    const sessionData = await readJsonResponse(sessionRes);
     if (!sessionRes.ok || !sessionData.session?.sessionToken) {
       throw new Error(sessionData.message || 'Unable to start configurator session');
     }
@@ -833,7 +843,7 @@ async function handleAddToCart() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
     });
-    const cartData = await cartRes.json();
+    const cartData = await readJsonResponse(cartRes);
 
     if (!cartRes.ok || !cartData.shopifyCartData?.checkoutUrl) {
       btn.disabled = false;
