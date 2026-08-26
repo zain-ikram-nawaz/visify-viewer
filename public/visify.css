@@ -13,7 +13,8 @@
   --v-radius: 8px;
 
   width: 100%;
-  height: 100%;
+  height: clamp(560px, 78vh, 760px);
+  min-height: 560px;
   display: flex;
   background: #fafafa;
   overflow: hidden;
@@ -61,6 +62,27 @@
   opacity: 0;
   transform: translateX(-50%) translateY(6px);
 }
+
+.v-canvas-tools {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.v-canvas-action {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--v-text);
+  border-radius: var(--v-radius);
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.v-canvas-action:hover { border-color: var(--v-accent); }
 
 /* Base-model error state — covers the canvas so it never sits empty/blank
    with no explanation when the GLTF fails to load. */
@@ -120,6 +142,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* Panel Header */
@@ -150,6 +173,11 @@
   font-size: 13px;
   line-height: 1.55;
   margin-top: 10px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  cursor: help;
 }
 
 /* Price Layout */
@@ -175,9 +203,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+.v-price-breakdown {
+  padding: 0 24px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #8a8a8a;
+  font-size: 11px;
+}
+.v-price-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+}
+
 /* Parts container */
 .v-parts-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 0;
 }
@@ -213,6 +255,16 @@
 }
 .v-part-header:hover { background: #f6f6f6; }
 
+.v-part-thumb {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: cover;
+  border-radius: calc(var(--v-radius) * 0.5);
+  border: 1px solid #e5e5e5;
+  background: #f8f8f8;
+}
+
 .v-part-name {
   font-size: 14px;
   font-weight: 500;
@@ -235,6 +287,11 @@
   font-size: 12px;
   color: #9a9a9a;
   line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  cursor: help;
 }
 
 /* Inline error shown briefly if a part's model fails to load */
@@ -387,7 +444,7 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-  #visify-root { flex-direction: column; height: auto; }
-  .v-canvas-wrap { height: 320px; }
+  #visify-root { flex-direction: column; height: 85vh; min-height: 560px; }
+  .v-canvas-wrap { height: 320px; flex: 0 0 320px; }
   #visify-panel { width: 100%; border-left: none; border-top: 1px solid #ececec; }
 }

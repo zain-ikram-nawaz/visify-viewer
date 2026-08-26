@@ -44,11 +44,16 @@ let scene, camera, renderer, controls;
 let animationId = null;
 let loadedParts = {};
 let selectedVariants = {};
+let originalMaterialStates = {};
 let sessionId = null;
+let sessionToken = null;
 let configuratorData = null;
 let totalPrice = 0;
 let baseModelCenter = new THREE.Vector3();
+let defaultCameraPosition = new THREE.Vector3();
+let defaultCameraTarget = new THREE.Vector3();
 let canvasHintTimer = null;
+let webglAvailable = true;
 
 // ── Loader ────────────────────────────────────────────────
 const loader = new GLTFLoader();
@@ -67,6 +72,16 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatMoney(value) {
+  const amount = Number(value) || 0;
+  const currency = configuratorData?.currencyCode || 'USD';
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
 }
 
 // ── Host Theme Detection ────────────────────────────────────
@@ -246,7 +261,11 @@ async function init() {
       }),
     });
     const sessionData = await sessionRes.json();
+    if (!sessionRes.ok || !sessionData.session?.sessionToken) {
+      throw new Error(sessionData.message || 'Unable to start configurator session');
+    }
     sessionId = sessionData.session._id;
+    sessionToken = sessionData.session.sessionToken;
 
   } catch (err) {
     document.getElementById('visify-loading').innerHTML = `<p style="color:#ef4444;font-size:13px;">⚠️ Connection Error</p>`;
@@ -261,7 +280,10 @@ async function init() {
     </div>
     <div class="v-canvas-wrap">
       <canvas id="visify-canvas"></canvas>
-      <div class="v-canvas-hint" id="v-canvas-hint">Drag to rotate · Scroll to zoom</div>
+      <div class="v-canvas-hint" id="v-canvas-hint">Drag to rotate · Scroll to zoom · Select an option to customize</div>
+      <div class="v-canvas-tools">
+        <button class="v-canvas-action" id="v-reset-view" type="button" title="Reset 3D view">Reset view</button>
+      </div>
       <div class="v-canvas-error" id="v-canvas-error" style="display:none;">
         <div class="v-canvas-error-icon">⚠️</div>
         <div class="v-canvas-error-title">Couldn't load 3D preview</div>
@@ -273,11 +295,13 @@ async function init() {
       <div class="v-panel-header">
         <div class="v-product-name">${escapeHtml(configuratorData.name)}</div>
         <div class="v-brand-name">Customize Option Layout</div>
+        ${configuratorData.description ? `<div class="v-desc" title="${escapeHtml(configuratorData.description)}">${escapeHtml(configuratorData.description)}</div>` : ''}
       </div>
       <div class="v-price-row">
         <span class="v-price-label">Total Price</span>
-        <span class="v-price-value" id="v-total-price">$${totalPrice.toFixed(2)}</span>
+        <span class="v-price-value" id="v-total-price">${formatMoney(totalPrice)}</span>
       </div>
+      <div class="v-price-breakdown" id="v-price-breakdown"></div>
       <div class="v-parts-scroll" id="v-parts-list"></div>
       <div class="v-cart-section">
         <button class="v-cart-btn" id="v-cart-btn">Add to Cart</button>
@@ -286,9 +310,15 @@ async function init() {
     </div>
   `;
 
-  setupThreeJS();
-
-  const baseGroup = await loadModel(configuratorData.baseModelUrl, 'base', true);
+  let baseGroup = null;
+  webglAvailable = true;
+  try {
+    setupThreeJS();
+    baseGroup = await loadModel(configuratorData.baseModelUrl, 'base', true);
+  } catch (err) {
+    webglAvailable = false;
+    console.warn('[Visify] 3D preview unavailable; keeping configurator controls active.', err);
+  }
   buildPartsPanel();
 
   for (const part of configuratorData.parts) {
@@ -297,12 +327,20 @@ async function init() {
       if (!group) console.warn(`[Visify] Failed to load required part: ${part.name}`);
     }
   }
+  // Re-render after defaults are loaded so toggles/swatches reflect the
+  // actual initial selection state instead of the pre-load empty state.
+  buildPartsPanel();
+  updatePrice();
 
   document.getElementById('v-cart-btn').addEventListener('click', handleAddToCart);
   document.getElementById('v-canvas-retry').addEventListener('click', retryBaseModel);
+  document.getElementById('v-reset-view').addEventListener('click', resetCameraView);
   document.getElementById('visify-loading').style.display = 'none';
 
-  if (baseGroup) {
+  if (!webglAvailable) {
+    document.getElementById('v-canvas-retry').style.display = 'none';
+    showCanvasError('3D preview is unavailable in this browser, but you can still configure and checkout.');
+  } else if (baseGroup) {
     showCanvasHint();
   } else {
     showCanvasError(
@@ -434,12 +472,15 @@ function loadModel(url, id, isBase = false) {
           const len = size.length();
           camera.position.set(0, len * 0.4, len * 1.4);
           controls.target.set(0, 0, 0);
+          defaultCameraPosition.copy(camera.position);
+          defaultCameraTarget.copy(controls.target);
         } else {
           group.position.sub(baseModelCenter);
         }
 
         scene.add(group);
         loadedParts[id] = group;
+        if (!isBase) captureOriginalMaterialStates(id, group);
         resolve(group);
       },
       (xhr) => {
@@ -456,8 +497,45 @@ function loadModel(url, id, isBase = false) {
   });
 }
 
+function captureOriginalMaterialStates(partId, group) {
+  const states = [];
+  group.traverse((child) => {
+    if (!child.isMesh || !child.material) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => {
+      states.push({
+        material,
+        map: material.map || null,
+        color: material.color?.clone() || null,
+      });
+    });
+  });
+  originalMaterialStates[partId] = states;
+}
+
+function resetPartMaterials(partId) {
+  (originalMaterialStates[partId] || []).forEach(({ material, map, color }) => {
+    material.map = map;
+    if (color && material.color) material.color.copy(color);
+    material.needsUpdate = true;
+  });
+}
+
+function resetCameraView() {
+  if (!camera || !controls || !defaultCameraPosition.length()) return;
+  camera.position.copy(defaultCameraPosition);
+  controls.target.copy(defaultCameraTarget);
+  controls.update();
+  showCanvasHint();
+}
+
 async function addPartToScene(part) {
   if (loadedParts[part._id]) return loadedParts[part._id];
+  if (!webglAvailable) {
+    loadedParts[part._id] = { virtualSelection: true };
+    updatePrice();
+    return loadedParts[part._id];
+  }
   const group = await loadModel(part.modelUrl, part._id);
   if (group) updatePrice();
   return group;
@@ -466,15 +544,17 @@ async function addPartToScene(part) {
 function removePartFromScene(partId) {
   const group = loadedParts[partId];
   if (group) {
-    scene.remove(group);
+    if (group.isObject3D) scene.remove(group);
     delete loadedParts[partId];
+    delete originalMaterialStates[partId];
+    delete selectedVariants[partId];
     updatePrice();
   }
 }
 
 function forEachPartMaterial(partId, fn) {
   const group = loadedParts[partId];
-  if (!group) return;
+  if (!group || typeof group.traverse !== 'function') return;
   group.traverse((child) => {
     if (child.isMesh && child.material) {
       const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -529,18 +609,32 @@ function applyVariantToPart(partId, variant) {
 
 function updatePrice() {
   totalPrice = configuratorData.basePrice || 0;
+  const lines = [{ label: 'Base', amount: configuratorData.basePrice || 0 }];
   configuratorData.parts.forEach(part => {
     if (loadedParts[part._id]) {
-      totalPrice += part.basePrice || 0;
+      if (part.basePrice) {
+        totalPrice += part.basePrice;
+        lines.push({ label: part.name, amount: part.basePrice });
+      }
       const selectedVariantId = selectedVariants[part._id];
       if (selectedVariantId) {
         const variant = part.variants.find(v => v._id === selectedVariantId);
-        if (variant) totalPrice += variant.priceModifier || 0;
+        if (variant && variant.priceModifier) {
+          totalPrice += variant.priceModifier;
+          lines.push({ label: variant.label, amount: variant.priceModifier });
+        }
       }
     }
   });
   const priceEl = document.getElementById('v-total-price');
-  if (priceEl) priceEl.textContent = `$${totalPrice.toFixed(2)}`;
+  if (priceEl) priceEl.textContent = formatMoney(totalPrice);
+  const breakdownEl = document.getElementById('v-price-breakdown');
+  if (breakdownEl) {
+    breakdownEl.innerHTML = lines
+      .filter(line => line.amount)
+      .map(line => `<div class="v-price-breakdown-row"><span>${escapeHtml(line.label)}</span><span>${line.amount > 0 ? '+' : ''}${formatMoney(line.amount)}</span></div>`)
+      .join('');
+  }
 }
 
 // ── Part error state (inline, auto-clears) ─────────────────
@@ -586,12 +680,13 @@ function buildPartsPanel() {
       html += `
         <div class="v-part-section">
           <div class="v-part-header" data-part-id="${part._id}">
+            ${part.thumbnailUrl ? `<img class="v-part-thumb" src="${escapeHtml(part.thumbnailUrl)}" alt="${escapeHtml(part.name)}">` : ''}
             <div class="v-part-name">
               <span class="v-part-dot ${isAdded ? 'active' : ''}" id="dot-${part._id}"></span>
               ${escapeHtml(part.name)}
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
-              ${part.basePrice > 0 ? `<span class="v-part-price">+$${part.basePrice}</span>` : ''}
+              ${part.basePrice > 0 ? `<span class="v-part-price">+${formatMoney(part.basePrice)}</span>` : ''}
               ${!part.isRequired ? `
                 <button class="v-part-toggle ${isAdded ? 'added' : ''}" id="toggle-${part._id}" data-part-id="${part._id}">
                   ${isAdded ? '✓' : '+'}
@@ -599,7 +694,7 @@ function buildPartsPanel() {
               ` : ''}
             </div>
           </div>
-          ${part.description ? `<div class="v-part-desc">${escapeHtml(part.description)}</div>` : ''}
+          ${part.description ? `<div class="v-part-desc" title="${escapeHtml(part.description)}">${escapeHtml(part.description)}</div>` : ''}
           ${hasVariants ? `
             <div class="v-variants ${isAdded ? 'open' : ''}" id="variants-${part._id}">
               <div class="v-variant-label">${part.variants.every(v => v.type === 'texture') ? 'Select Texture' : 'Select Option'}</div>
@@ -686,13 +781,18 @@ function buildPartsPanel() {
       const variantId = swatch.dataset.variantId;
       const value = swatch.dataset.value;
       const type = swatch.dataset.type;
+      const isSelected = selectedVariants[partId] === variantId;
 
       list.querySelectorAll(`.v-swatch[data-part-id="${partId}"]`).forEach(s => s.classList.remove('active'));
-      swatch.classList.add('active');
-
-      selectedVariants[partId] = variantId;
-      if (loadedParts[partId]) {
-        applyVariantToPart(partId, { type, value });
+      if (isSelected) {
+        delete selectedVariants[partId];
+        resetPartMaterials(partId);
+      } else {
+        swatch.classList.add('active');
+        selectedVariants[partId] = variantId;
+        if (loadedParts[partId]) {
+          applyVariantToPart(partId, { type, value });
+        }
       }
       updatePrice();
     });
@@ -721,15 +821,17 @@ async function handleAddToCart() {
     });
 
   try {
-    await fetch(`${API_BASE}/configurator/session/${sessionId}`, {
+    const updateRes = await fetch(`${API_BASE}/configurator/session/${sessionId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
       body: JSON.stringify({ selectedParts, totalPrice }),
     });
+    const updateData = await updateRes.json().catch(() => ({}));
+    if (!updateRes.ok) throw new Error(updateData.message || 'Could not save your configuration');
 
     const cartRes = await fetch(`${API_BASE}/configurator/session/${sessionId}/cart`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
     });
     const cartData = await cartRes.json();
 
@@ -745,7 +847,7 @@ async function handleAddToCart() {
       // review), so there's nothing real to redirect to. Confirm the
       // computed price/parts reached here correctly instead of silently
       // landing on an empty native /cart page.
-      btn.textContent = `✅ Dev stub OK — $${cartData.shopifyCartData.totalPrice}`;
+      btn.textContent = `✅ Dev stub OK — ${formatMoney(cartData.shopifyCartData.totalPrice)}`;
       return;
     }
 
@@ -756,7 +858,10 @@ async function handleAddToCart() {
     window.location.href = cartData.shopifyCartData.checkoutUrl;
   } catch (err) {
     btn.disabled = false;
-    btn.textContent = 'Add to Cart';
+    btn.textContent = err.message || 'Could not start checkout';
+    setTimeout(() => {
+      if (!btn.disabled) btn.textContent = 'Add to Cart';
+    }, 4500);
   }
 }
 
