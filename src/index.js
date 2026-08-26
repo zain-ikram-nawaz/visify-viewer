@@ -847,7 +847,7 @@ async function handleAddToCart() {
 
     if (!cartRes.ok || !cartData.shopifyCartData?.checkoutUrl) {
       btn.disabled = false;
-      btn.textContent = cartData.message || 'Unavailable — try again';
+      btn.textContent = cartData.error ? `${cartData.message || 'Checkout unavailable'}: ${cartData.error}` : (cartData.message || 'Unavailable — try again');
       return;
     }
 
