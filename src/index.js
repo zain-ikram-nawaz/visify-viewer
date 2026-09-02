@@ -390,12 +390,13 @@ function setupThreeJS() {
   const canvas = document.getElementById('visify-canvas');
 
   try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+    // Keep the primary context options identical to the previously working viewer.
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   } catch (firstError) {
-    // Some embedded browsers reject antialias/high-performance context attributes.
-    // Retry with the most compatible WebGL settings before giving up.
+    // Some embedded browsers reject antialiasing. Retry with the most compatible
+    // settings before giving up.
     console.warn('[Visify] Retrying WebGL with compatibility settings.', firstError);
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'low-power' });
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true });
   }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
