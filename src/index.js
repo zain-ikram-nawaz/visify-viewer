@@ -306,6 +306,7 @@ async function init() {
         <button class="v-canvas-action v-canvas-icon" id="v-zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
         <button class="v-canvas-action v-canvas-icon" id="v-zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="v-canvas-action" id="v-reset-view" type="button" title="Reset 3D view">Reset view</button>
+        <button class="v-canvas-action v-canvas-icon" id="v-fullscreen" type="button" title="View fullscreen" aria-label="View fullscreen">⛶</button>
       </div>
       <div class="v-canvas-error" id="v-canvas-error" style="display:none;">
         <div class="v-canvas-error-icon">⚠️</div>
@@ -364,6 +365,10 @@ async function init() {
   document.getElementById('v-zoom-out').addEventListener('click', () => adjustCameraZoom('out'));
   document.getElementById('v-zoom-in').addEventListener('click', () => adjustCameraZoom('in'));
   document.getElementById('v-reset-view').addEventListener('click', resetCameraView);
+  document.getElementById('v-fullscreen').addEventListener('click', toggleViewerFullscreen);
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenButton);
+  syncFullscreenButton();
   document.getElementById('visify-loading').style.display = 'none';
 
   if (!webglAvailable) {
@@ -584,6 +589,41 @@ function adjustCameraZoom(direction) {
   else controls.dollyOut(1 / zoomFactor);
   controls.update();
   document.getElementById('v-canvas-hint')?.classList.add('v-hidden');
+}
+
+function getFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+async function toggleViewerFullscreen() {
+  const root = document.getElementById('visify-root');
+  if (!root) return;
+
+  try {
+    if (getFullscreenElement()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) await exit.call(document);
+      return;
+    }
+
+    const request = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (request) await request.call(root);
+  } catch (err) {
+    console.warn('[Visify] Fullscreen mode is unavailable.', err);
+  }
+}
+
+function syncFullscreenButton() {
+  const button = document.getElementById('v-fullscreen');
+  const root = document.getElementById('visify-root');
+  if (!button || !root) return;
+
+  const isFullscreen = getFullscreenElement() === root;
+  root.classList.toggle('v-fullscreen', isFullscreen);
+  button.textContent = isFullscreen ? '×' : '⛶';
+  button.title = isFullscreen ? 'Exit fullscreen' : 'View fullscreen';
+  button.setAttribute('aria-label', button.title);
+  button.setAttribute('aria-pressed', String(isFullscreen));
 }
 
 async function addPartToScene(part) {

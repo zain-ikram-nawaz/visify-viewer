@@ -24,6 +24,16 @@
   color: var(--v-text);
 }
 
+#visify-root.v-fullscreen,
+#visify-root:fullscreen,
+#visify-root:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
 /* ── Canvas ── */
 .v-canvas-wrap {
   flex: 1;
@@ -165,6 +175,8 @@
   font-size: 20px;
   line-height: 1;
 }
+
+#v-fullscreen { font-size: 19px; }
 
 .v-canvas-instructions {
   position: absolute;
