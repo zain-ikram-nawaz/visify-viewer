@@ -317,7 +317,6 @@ async function init() {
     <div id="visify-panel">
       <div class="v-panel-header">
         <div class="v-product-name">${escapeHtml(configuratorData.name)}</div>
-        <div class="v-brand-name">Customize Option Layout</div>
         ${configuratorData.description ? `<div class="v-desc" title="${escapeHtml(configuratorData.description)}">${escapeHtml(configuratorData.description)}</div>` : ''}
       </div>
       <div class="v-price-row">
@@ -332,6 +331,10 @@ async function init() {
       </div>
     </div>
   `;
+  const canvasBackdrop = document.querySelector('.v-canvas-backdrop');
+  if (canvasBackdrop && configuratorData.shopifyImageUrl) {
+    canvasBackdrop.style.setProperty('--v-product-image', `url(${JSON.stringify(configuratorData.shopifyImageUrl)})`);
+  }
 
   let baseGroup = null;
   webglAvailable = true;
@@ -340,6 +343,7 @@ async function init() {
     baseGroup = await loadModel(configuratorData.baseModelUrl, 'base', true);
   } catch (err) {
     webglAvailable = false;
+    document.querySelector('.v-canvas-wrap')?.classList.add('v-no-webgl');
     console.warn('[Visify] 3D preview unavailable; keeping configurator controls active.', err);
   }
   buildPartsPanel();
@@ -364,10 +368,15 @@ async function init() {
 
   if (!webglAvailable) {
     document.getElementById('v-canvas-retry').style.display = 'none';
-    showCanvasError('3D preview is unavailable in this browser, but you can still configure and checkout.');
+    showCanvasError(
+      configuratorData.shopifyImageUrl
+        ? '3D view is unavailable in this browser. Showing a product image preview instead.'
+        : '3D preview is unavailable in this browser, but you can still configure and checkout.'
+    );
   } else if (baseGroup) {
     showCanvasHint();
   } else {
+    document.querySelector('.v-canvas-wrap')?.classList.add('v-model-error');
     showCanvasError(
       configuratorData.baseModelUrl
         ? "The base model couldn't be loaded. Check your connection and try again."
@@ -380,7 +389,14 @@ async function init() {
 function setupThreeJS() {
   const canvas = document.getElementById('visify-canvas');
 
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+  } catch (firstError) {
+    // Some embedded browsers reject antialias/high-performance context attributes.
+    // Retry with the most compatible WebGL settings before giving up.
+    console.warn('[Visify] Retrying WebGL with compatibility settings.', firstError);
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'low-power' });
+  }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -411,14 +427,18 @@ function setupThreeJS() {
     document.getElementById('v-canvas-hint')?.classList.add('v-hidden');
   });
 
-  const resizeObserver = new ResizeObserver(() => {
+  const resizeRenderer = () => {
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-  });
-  resizeObserver.observe(canvas);
+  };
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(resizeRenderer).observe(canvas);
+  } else {
+    window.addEventListener('resize', resizeRenderer);
+  }
 
   animate();
 }
