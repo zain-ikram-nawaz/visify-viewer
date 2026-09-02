@@ -289,9 +289,22 @@ async function init() {
       <div class="v-progress"><div class="v-progress-fill" id="v-fill"></div></div>
     </div>
     <div class="v-canvas-wrap">
+      <div class="v-canvas-backdrop" aria-hidden="true">
+        <div class="v-stage-ring v-stage-ring-one"></div>
+        <div class="v-stage-ring v-stage-ring-two"></div>
+        <div class="v-stage-glow"></div>
+        <div class="v-stage-caption">LIVE 3D PREVIEW</div>
+      </div>
       <canvas id="visify-canvas"></canvas>
-      <div class="v-canvas-hint" id="v-canvas-hint">Drag to rotate · Scroll to zoom · Select an option to customize</div>
+      <div class="v-canvas-hint" id="v-canvas-hint">Drag to rotate · Right-drag to move · Scroll or use +/- to zoom</div>
+      <div class="v-canvas-instructions" aria-label="3D viewer instructions">
+        <span><i class="v-instruction-dot v-instruction-rotate"></i>Rotate</span>
+        <span><i class="v-instruction-dot v-instruction-pan"></i>Move</span>
+        <span><i class="v-instruction-dot v-instruction-zoom"></i>Zoom</span>
+      </div>
       <div class="v-canvas-tools">
+        <button class="v-canvas-action v-canvas-icon" id="v-zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+        <button class="v-canvas-action v-canvas-icon" id="v-zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
         <button class="v-canvas-action" id="v-reset-view" type="button" title="Reset 3D view">Reset view</button>
       </div>
       <div class="v-canvas-error" id="v-canvas-error" style="display:none;">
@@ -344,6 +357,8 @@ async function init() {
 
   document.getElementById('v-cart-btn').addEventListener('click', handleAddToCart);
   document.getElementById('v-canvas-retry').addEventListener('click', retryBaseModel);
+  document.getElementById('v-zoom-out').addEventListener('click', () => adjustCameraZoom('out'));
+  document.getElementById('v-zoom-in').addEventListener('click', () => adjustCameraZoom('in'));
   document.getElementById('v-reset-view').addEventListener('click', resetCameraView);
   document.getElementById('visify-loading').style.display = 'none';
 
@@ -371,7 +386,8 @@ function setupThreeJS() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color('#fafafa');
+  // Keep the renderer transparent so the lightweight CSS stage backdrop remains visible.
+  scene.background = null;
 
   const w = canvas.clientWidth;
   const h = canvas.clientHeight;
@@ -389,6 +405,7 @@ function setupThreeJS() {
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
+  controls.enablePan = true;
   controls.maxPolarAngle = Math.PI / 2; // Prevents camera from going under floor grid
   controls.addEventListener('start', () => {
     document.getElementById('v-canvas-hint')?.classList.add('v-hidden');
@@ -537,6 +554,15 @@ function resetCameraView() {
   controls.target.copy(defaultCameraTarget);
   controls.update();
   showCanvasHint();
+}
+
+function adjustCameraZoom(direction) {
+  if (!camera || !controls) return;
+  const zoomFactor = direction === 'in' ? 1.18 : 1 / 1.18;
+  if (direction === 'in') controls.dollyIn(zoomFactor);
+  else controls.dollyOut(1 / zoomFactor);
+  controls.update();
+  document.getElementById('v-canvas-hint')?.classList.add('v-hidden');
 }
 
 async function addPartToScene(part) {
@@ -693,7 +719,7 @@ function buildPartsPanel() {
             ${part.thumbnailUrl ? `<img class="v-part-thumb" src="${escapeHtml(part.thumbnailUrl)}" alt="${escapeHtml(part.name)}">` : ''}
             <div class="v-part-name">
               <span class="v-part-dot ${isAdded ? 'active' : ''}" id="dot-${part._id}"></span>
-              ${escapeHtml(part.name)}
+              <span class="v-part-name-text">${escapeHtml(part.name)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               ${part.basePrice > 0 ? `<span class="v-part-price">+${formatMoney(part.basePrice)}</span>` : ''}
